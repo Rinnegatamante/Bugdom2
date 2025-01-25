@@ -10,6 +10,15 @@
 #include <iostream>
 #include <cstring>
 
+#ifdef __vita__
+#include <unistd.h> 
+#include <vitasdk.h>
+extern "C" {
+int _newlib_heap_size_user = 256 * 1024 * 1024;
+void vglInitExtended(int legacy_pool_size, int width, int height, int ram_threshold, SceGxmMultisampleMode msaa);
+};
+#endif
+
 extern "C"
 {
 	#include "game.h"
@@ -54,7 +63,11 @@ tryAgain:
 			break;
 
 		case 2:
+#if defined(__vita__)
+			dataPath = "ux0:data/Bugdom2/Data";
+#else
 			dataPath = "Data";
+#endif
 			break;
 
 		default:
@@ -78,8 +91,45 @@ tryAgain:
 	return dataPath;
 }
 
+#ifdef __vita__
+void recursive_cpdir(const char *src, const char *dst) {
+	SceIoDirent g_dir;
+	int fd = sceIoDopen(src);
+	char src_path[512], dst_path[512];
+	while (sceIoDread(fd, &g_dir) > 0) {
+		sprintf(src_path, "%s/%s", src, g_dir.d_name);
+		sprintf(dst_path, "%s/%s", dst, g_dir.d_name);
+		if (SCE_S_ISDIR(g_dir.d_stat.st_mode)) {
+			sceIoMkdir(dst_path, 0777);
+			recursive_cpdir(src_path, dst_path);
+		} else {
+			FILE *f = fopen(src_path, "rb");
+			void *buf = malloc(g_dir.d_stat.st_size);
+			fread(buf, 1, g_dir.d_stat.st_size, f);
+			fclose(f);
+			f = fopen(dst_path, "wb");
+			fwrite(buf, 1, g_dir.d_stat.st_size, f);
+			fclose(f);
+			free(buf);
+		}
+	}
+	sceIoDclose(fd);
+}
+#endif
+
 static void Boot(int argc, char** argv)
 {
+#ifdef __vita__
+	// Install shader cache to avoid a few stutters first time game is played
+	FILE *f = fopen("ux0:data/Bugdom2/shaders.bin", "rb");
+	if (!f) {
+		sceIoMkdir("ux0:data/shader_cache", 0777);
+		recursive_cpdir("app0:shaders", "ux0:data/shader_cache");
+		f = fopen("ux0:data/Bugdom2/shaders.bin", "wb");
+	}
+	fclose(f);
+#endif	
+	
 	const char* executablePath = argc > 0 ? argv[0] : NULL;
 
 	SDL_LogSetAllPriority(SDL_LOG_PRIORITY_INFO);
@@ -183,6 +233,23 @@ int main(int argc, char** argv)
 	int				returnCode				= 0;
 	std::string		finalErrorMessage		= "";
 	bool			showFinalErrorMessage	= false;
+
+#ifdef __vita__
+	sceAppUtilInit(&(SceAppUtilInitParam){}, &(SceAppUtilBootParam){});
+	SceCommonDialogConfigParam cmnDlgCfgParam;
+	sceCommonDialogConfigParamInit(&cmnDlgCfgParam);
+	sceAppUtilSystemParamGetInt(SCE_SYSTEM_PARAM_ID_LANG, (int *)&cmnDlgCfgParam.language);
+	sceAppUtilSystemParamGetInt(SCE_SYSTEM_PARAM_ID_ENTER_BUTTON, (int *)&cmnDlgCfgParam.enterButtonAssign);
+	sceCommonDialogSetConfigParam(&cmnDlgCfgParam);
+	
+	SDL_setenv("VITA_DISABLE_TOUCH_BACK", "1", 1);
+	scePowerSetArmClockFrequency(444);
+	scePowerSetBusClockFrequency(222);
+	scePowerSetGpuClockFrequency(222);
+	scePowerSetGpuXbarClockFrequency(166);
+	vglInitExtended(2 * 1024 * 1024, 960, 544, 2 * 1024 * 1024, SCE_GXM_MULTISAMPLE_4X);
+	chdir("ux0:data");
+#endif
 
 	try
 	{

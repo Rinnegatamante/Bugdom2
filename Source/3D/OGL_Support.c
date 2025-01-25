@@ -352,9 +352,9 @@ OGLStyleDefType *styleDefPtr = &setupDefPtr->styles;
 
 
 		/* SET FOG */
-
+#ifndef __vita__
 	glHint(GL_FOG_HINT, GL_FASTEST);
-
+#endif
 	if (styleDefPtr->useFog)
 	{
 		glFogi(GL_FOG_MODE, styleDefPtr->fogMode);
@@ -1183,10 +1183,11 @@ uint32_t	a;
 
 void OGL_Texture_SetOpenGLTexture(GLuint textureName)
 {
+#ifndef __vita__
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 	if (OGL_CheckError())
 		DoFatalAlert("OGL_Texture_SetOpenGLTexture: glPixelStorei failed!");
-
+#endif
 	glBindTexture(GL_TEXTURE_2D, textureName);
 	if (OGL_CheckError())
 		DoFatalAlert("OGL_Texture_SetOpenGLTexture: glBindTexture failed!");
@@ -1369,6 +1370,7 @@ OGLLightDefType	*lights;
 
 GLenum OGL_CheckError_Impl(const char* file, const int line)
 {
+#ifndef __vita__
 	GLenum error = glGetError();
 	if (error != 0)
 	{
@@ -1387,6 +1389,9 @@ GLenum OGL_CheckError_Impl(const char* file, const int line)
 		DoFatalAlert("OpenGL error 0x%x (%s)\nin %s:%d", error, text, file, line);
 	}
 	return error;
+#else
+	return GL_NO_ERROR;
+#endif
 }
 
 
